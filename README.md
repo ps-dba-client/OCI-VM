@@ -17,7 +17,7 @@ Install copies files to **`/opt/script/`** and creates a Python **venv** there.
 
 ## 1. Deploy the GCP Linux VM (Splunk OTel lab)
 
-Use the Terraform stack under **[HL/gcp/linux-splunk-otel-lab](https://github.com/ps-dba-client)** (same tree as your consultant workspace) or equivalent:
+Use the Terraform stack under **`gcp/linux-splunk-otel-lab/terraform`** in the [ps-dba-client/OCI](https://github.com/ps-dba-client/OCI) companion workspace (or your fork) — or any Ubuntu VM with outbound HTTPS:
 
 ```bash
 cd gcp/linux-splunk-otel-lab/terraform
