@@ -25,7 +25,12 @@ if [[ ! -d "${TARGET}/venv" ]]; then
   python3 -m venv "${TARGET}/venv"
 fi
 "${TARGET}/venv/bin/pip" install --upgrade pip
-"${TARGET}/venv/bin/pip" install -r "${TARGET}/requirements.txt"
+"${TARGET}/venv/bin/pip" install --no-cache-dir -r "${TARGET}/requirements.txt"
+if ! "${TARGET}/venv/bin/python" -c "import oci, requests" 2>/dev/null; then
+  echo "pip retry: oci import failed; reinstalling oci wheel"
+  "${TARGET}/venv/bin/pip" install --force-reinstall --no-cache-dir "oci>=2.126.0"
+fi
+"${TARGET}/venv/bin/python" -c "import oci, requests; print('venv ok')"
 
 if [[ ! -f "${TARGET}/env" ]]; then
   install -m 0600 "${TARGET}/env.example" "${TARGET}/env"

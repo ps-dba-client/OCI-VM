@@ -17,30 +17,45 @@ Install copies files to **`/opt/script/`** and creates a Python **venv** there.
 
 ## 1. Deploy the GCP Linux VM (Splunk OTel lab)
 
-Use the Terraform stack under **`gcp/linux-splunk-otel-lab/terraform`** in the [ps-dba-client/OCI](https://github.com/ps-dba-client/OCI) companion workspace (or your fork) — or any Ubuntu VM with outbound HTTPS:
+Use the Terraform stack under **`gcp/linux-splunk-otel-lab/terraform`** in your copy of the lab tree (same layout as [ps-dba-client/OCI](https://github.com/ps-dba-client/OCI) `gcp/` folder if you publish it) — or any Ubuntu VM with outbound HTTPS.
 
 ```bash
 cd gcp/linux-splunk-otel-lab/terraform
+export GOOGLE_APPLICATION_CREDENTIALS="/path/to/service-account.json"
 cp terraform.tfvars.example terraform.tfvars
-# Set project_id, region, zone, allowed_ingress_cidr (your /32), etc.
+# Set project_id, region, zone; tighten allowed_ingress_cidr for SSH.
 terraform init
 terraform apply
 ```
 
-After apply, **SSH** to the instance and install the **Splunk OpenTelemetry Collector** with **instrumentation** enabled so host and language auto-instrumentation work as designed, for example:
+Terraform variables **`bootstrap_oci_metrics_bridge`** (default `true`) and **`oci_vm_repo_url`** control a **first-boot startup script** that clones this repo and runs **`install-to-opt.sh`**, so **`/opt/script`** is ready after boot. Logs: **`/var/log/oci-bridge-bootstrap.log`**, marker: **`/opt/script/.bootstrap-complete`**.
+
+**Validate bootstrap:**
 
 ```bash
-# On the VM (example — use your lab’s install script / token flow)
-export SPLUNK_ACCESS_TOKEN="***"
-export SPLUNK_REALM="us1"
-sudo -E ./install-splunk-otel-collector.sh install --realm us1 --with-instrumentation
+gcloud compute ssh INSTANCE --zone=ZONE --project=PROJECT \
+  --command="sudo tail -20 /var/log/oci-bridge-bootstrap.log && ls -la /opt/script"
 ```
 
-Reference scripts: `gcp/linux-splunk-otel-lab/scripts/install-splunk-otel-collector.sh` in the workspace.
+If **`import oci`** fails right after boot, **`install-to-opt.sh`** now retries reinstalling the **`oci`** wheel (rare race on small shapes).
 
-## 2. Install this bridge to `/opt/script`
+### Splunk OpenTelemetry Collector + auto-instrumentation
 
-On the VM (as **root**):
+After SSH, install the collector **with instrumentation** (online example):
+
+```bash
+curl -sSL https://dl.signalfx.com/splunk-otel-collector.sh -o /tmp/splunk-otel-collector.sh
+sudo chmod +x /tmp/splunk-otel-collector.sh
+export SPLUNK_ACCESS_TOKEN="YOUR_TOKEN"
+export SPLUNK_REALM="us1"
+sudo -E /tmp/splunk-otel-collector.sh install --realm us1 --with-instrumentation --deployment-environment gcp-lab --online
+```
+
+Or copy **`install-splunk-otel-collector.sh`** from the lab **`scripts/`** tree and use **`--online`** / **`--offline`** as documented there.
+
+## 2. Install this bridge to `/opt/script` (manual path)
+
+Skip this if Terraform bootstrap already ran. On the VM as **root**:
 
 ```bash
 sudo apt-get update && sudo apt-get install -y git python3 python3-venv rsync
