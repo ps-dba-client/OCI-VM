@@ -1,78 +1,62 @@
-# OCI-VM — OCI metrics bridge on a Linux VM (GCP lab)
+# OCI-VM — OCI metrics bridge on a Linux VM
 
-This repository holds a **Python port** of the serverless [ps-dba-client/OCI](https://github.com/ps-dba-client/OCI) metrics bridge: it calls **OCI Monitoring** (list + summarize), forwards gauges to **Splunk Observability** (SignalFx ingest), and sends structured events to **Splunk Cloud** via **HEC**.
+Python bridge: **OCI Monitoring** (list + summarize) → **Splunk Observability** (metrics ingest) + **Splunk Cloud** (HEC events).
 
-The serverless version uses **OCI resource principals**. On a **GCP** (or any non-OCI) VM you must use an **OCI IAM user API key** in `~/.oci/config` with policies that allow **read/inspect metrics** on the target compartment.
+**Assumption:** You already have a **Linux VM**—for example on **GCP**, **Azure**, **OCI Compute**, another provider, or **on-prem**—with outbound **HTTPS** to OCI and Splunk. This repo does **not** cover creating or sizing that VM; it only covers OCI IAM, installing this bridge under `/opt/script`, and configuration.
 
-## Layout (mirrors deployment path)
+The [serverless sample](https://github.com/ps-dba-client/OCI) uses **OCI resource principals**. On a non-OCI or external host you use an **OCI IAM user API key** in `~/.oci/config` and policies that allow **read metrics** for the compartments you query.
 
-| Path in repo | On the VM after install |
-|--------------|-------------------------|
+**Related (Terraform / Functions / enterprise rollout):** the companion repo documents the **OCI Functions** path, image build, CI, and strict-networking phases: [docs index](https://github.com/ps-dba-client/OCI/tree/main/docs), [Enterprise deployment](https://github.com/ps-dba-client/OCI/blob/main/docs/ENTERPRISE-DEPLOYMENT.md), [Function image deploy](https://github.com/ps-dba-client/OCI/blob/main/docs/DEPLOY-FUNCTION.md), [GitHub & `$HOME/.ssh/id_ed25519_github`](https://github.com/ps-dba-client/OCI/blob/main/docs/DEPLOY-GITHUB.md).
+
+---
+
+## Full setup: OCI + install + run
+
+Step-by-step **OCI IAM** (user, API key, group, policy), **metrics scope** (tenancy/subtree), **copy credentials to the host**, **install**, **`env`**, and **troubleshooting**:
+
+**[docs/VM-END-TO-END-SETUP.md](docs/VM-END-TO-END-SETUP.md)**
+
+---
+
+## Layout (on the VM after install)
+
+| Path in repo | On the VM |
+|--------------|-----------|
 | `opt/script/oci_metrics_bridge_vm.py` | `/opt/script/oci_metrics_bridge_vm.py` |
 | `opt/script/requirements.txt` | `/opt/script/requirements.txt` |
 | `opt/script/run-with-otel.sh` | `/opt/script/run-with-otel.sh` |
 | `opt/script/env.example` | Copy to `/opt/script/env` (secrets, not committed) |
 
-Install copies files to **`/opt/script/`** and creates a Python **venv** there.
+[`install-to-opt.sh`](install-to-opt.sh) copies files to **`/opt/script/`** and creates the Python **venv** there.
 
-## 1. Deploy the GCP Linux VM (Splunk OTel lab)
+---
 
-Use the Terraform stack under **`gcp/linux-splunk-otel-lab/terraform`** in your copy of the lab tree (same layout as [ps-dba-client/OCI](https://github.com/ps-dba-client/OCI) `gcp/` folder if you publish it) — or any Ubuntu VM with outbound HTTPS.
+## Install on the VM
 
-```bash
-cd gcp/linux-splunk-otel-lab/terraform
-export GOOGLE_APPLICATION_CREDENTIALS="/path/to/service-account.json"
-cp terraform.tfvars.example terraform.tfvars
-# Set project_id, region, zone; tighten allowed_ingress_cidr for SSH.
-terraform init
-terraform apply
-```
-
-Terraform variables **`bootstrap_oci_metrics_bridge`** (default `true`) and **`oci_vm_repo_url`** control a **first-boot startup script** that clones this repo and runs **`install-to-opt.sh`**, so **`/opt/script`** is ready after boot. Logs: **`/var/log/oci-bridge-bootstrap.log`**, marker: **`/opt/script/.bootstrap-complete`**.
-
-**Validate bootstrap:**
+As **root** on your existing host:
 
 ```bash
-gcloud compute ssh INSTANCE --zone=ZONE --project=PROJECT \
-  --command="sudo tail -20 /var/log/oci-bridge-bootstrap.log && ls -la /opt/script"
-```
-
-If **`import oci`** fails right after boot, **`install-to-opt.sh`** now retries reinstalling the **`oci`** wheel (rare race on small shapes).
-
-### Splunk OpenTelemetry Collector + auto-instrumentation
-
-After SSH, install the collector **with instrumentation** (online example):
-
-```bash
-curl -sSL https://dl.signalfx.com/splunk-otel-collector.sh -o /tmp/splunk-otel-collector.sh
-sudo chmod +x /tmp/splunk-otel-collector.sh
-export SPLUNK_ACCESS_TOKEN="YOUR_TOKEN"
-export SPLUNK_REALM="us1"
-sudo -E /tmp/splunk-otel-collector.sh install --realm us1 --with-instrumentation --deployment-environment gcp-lab --online
-```
-
-Or copy **`install-splunk-otel-collector.sh`** from the lab **`scripts/`** tree and use **`--online`** / **`--offline`** as documented there.
-
-## 2. Install this bridge to `/opt/script` (manual path)
-
-Skip this if Terraform bootstrap already ran. On the VM as **root**:
-
-```bash
-sudo apt-get update && sudo apt-get install -y git python3 python3-venv rsync
-sudo git clone https://github.com/ps-dba-client/OCI-VM.git /usr/local/src/OCI-VM
+apt-get update && apt-get install -y git python3 python3-venv rsync
+git clone https://github.com/ps-dba-client/OCI-VM.git /usr/local/src/OCI-VM
 cd /usr/local/src/OCI-VM
-sudo ./install-to-opt.sh
+chmod +x install-to-opt.sh
+./install-to-opt.sh
 ```
 
-## 3. OCI API key on the VM
+Then complete **OCI** setup and **`/opt/script/env`** per **[docs/VM-END-TO-END-SETUP.md](docs/VM-END-TO-END-SETUP.md)**.
 
-Create an **OCI IAM user** (or reuse a technical user) and add an **API key**. On the VM:
+**Traces / log correlation:** the venv must include **`splunk-opentelemetry`** (installed via `requirements.txt`). Without it, **trace_id / span_id** stay empty. [`run-with-otel.sh`](opt/script/run-with-otel.sh) sets `OTEL_PYTHON_LOG_CORRELATION=true` and runs the app under `opentelemetry-instrument`.
+
+---
+
+## OCI credentials on the VM
+
+Create the IAM user, API key, group, and policy on the OCI side (see the full guide). On the host:
 
 ```bash
 sudo mkdir -p /root/.oci
 sudo chmod 0700 /root/.oci
-# Place private key PEM and create config — example:
-sudo nano /root/.oci/config
+# Place config + private PEM; chmod 600
 ```
 
 Minimal `~/.oci/config`:
@@ -86,9 +70,9 @@ region=us-ashburn-1
 key_file=/root/.oci/oci_api_key.pem
 ```
 
-**IAM policy** (in OCI) must allow this user to **read** and **inspect** metrics in `METRICS_COMPARTMENT_OCID` (and to use `compartment_id_in_subtree` when listing from root — same rules as the serverless sample).
+---
 
-## 4. Configure `/opt/script/env`
+## Configure `/opt/script/env`
 
 ```bash
 sudo cp /opt/script/env.example /opt/script/env
@@ -96,9 +80,11 @@ sudo chmod 600 /opt/script/env
 sudo nano /opt/script/env
 ```
 
-Set at least: `SPLUNK_REALM`, `SPLUNK_ACCESS_TOKEN`, `SPLUNK_HEC_URL`, `SPLUNK_HEC_TOKEN`, `METRICS_COMPARTMENT_OCID`, and `LIST_METRICS_IN_SUBTREE=true` only when scanning from the **tenancy root**.
+Set Splunk and OCI scope variables as described in the full guide and in [`opt/script/env.example`](opt/script/env.example).
 
-## 5. Test (Splunk OTel auto-instrumentation)
+---
+
+## Test
 
 ```bash
 sudo /opt/script/run-with-otel.sh
@@ -106,40 +92,31 @@ echo $?
 sudo cat /opt/script/logs/last-run.json
 ```
 
-Expect:
-
-- **Splunk Observability**: traces for `oci-metrics-bridge-vm` with spans such as `oci.monitoring.*`, `splunk_o11y.ingest_datapoints`, `splunk_cloud.hec_submit`.
-- **Splunk Cloud**: HEC events (`source` / `sourcetype` from env).
-- **Local JSON**: `/opt/script/logs/last-run.json` overwritten each run with `status`, counts, and `log_entries`.
-
-Run **without** `opentelemetry-instrument` only for debugging (no OTLP traces):
+**Debug without OTLP** (no distributed traces):
 
 ```bash
 sudo /opt/script/venv/bin/python /opt/script/oci_metrics_bridge_vm.py
 ```
+(with `env` sourced if you rely on exported variables)
 
-## 6. Cron (after validation)
+---
+
+## Cron (after validation)
 
 ```bash
 sudo cp /opt/script/cron.example /etc/cron.d/oci-metrics-bridge
 sudo chmod 0644 /etc/cron.d/oci-metrics-bridge
 ```
 
-Adjust schedule as needed. Cron stdout/stderr append to `/opt/script/logs/cron.log`; the structured run log still overwrites **`last-run.json`** each execution.
+Adjust schedule as needed.
 
-## OCI Terraform destroy (serverless stack)
-
-The companion **OCI** sample can be torn down when moving to a VM-only client workflow:
-
-```bash
-cd oci/terraform
-terraform destroy
-```
+---
 
 ## Security
 
 - Do **not** commit `/opt/script/env`, API private keys, or Splunk tokens.
-- Restrict SSH (`allowed_ingress_cidr`) and use least-privilege OCI policies.
+- Use least-privilege OCI policies and restrict access to the host.
+- For **egress allowlists**, **Vault/secrets**, and **IAM split** patterns aimed at regulated environments, align with [Enterprise deployment (OCI repo)](https://github.com/ps-dba-client/OCI/blob/main/docs/ENTERPRISE-DEPLOYMENT.md) where applicable.
 
 ## Disclaimer
 

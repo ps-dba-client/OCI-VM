@@ -7,4 +7,5 @@ venv/
 opt/script/venv/
 opt/script/env
 opt/script/logs/
+.DS_Store
 

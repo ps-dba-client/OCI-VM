@@ -20,6 +20,8 @@ export OTEL_EXPORTER_OTLP_TRACES_PROTOCOL="${OTEL_EXPORTER_OTLP_TRACES_PROTOCOL:
 export OTEL_EXPORTER_OTLP_METRICS_PROTOCOL="${OTEL_EXPORTER_OTLP_METRICS_PROTOCOL:-http/protobuf}"
 export OTEL_TRACES_SAMPLER="${OTEL_TRACES_SAMPLER:-always_on}"
 export OTEL_LOGS_EXPORTER="${OTEL_LOGS_EXPORTER:-none}"
+# Correlate stdlib logs with active span (trace_id / span_id on LogRecord and in formatters).
+export OTEL_PYTHON_LOG_CORRELATION="${OTEL_PYTHON_LOG_CORRELATION:-true}"
 export OTEL_RESOURCE_ATTRIBUTES="${OTEL_RESOURCE_ATTRIBUTES:-deployment.environment=gcp-lab,service.namespace=oci-bridge}"
 
 exec /opt/script/venv/bin/opentelemetry-instrument /opt/script/venv/bin/python /opt/script/oci_metrics_bridge_vm.py "$@"

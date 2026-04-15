@@ -30,7 +30,11 @@ if ! "${TARGET}/venv/bin/python" -c "import oci, requests" 2>/dev/null; then
   echo "pip retry: oci import failed; reinstalling oci wheel"
   "${TARGET}/venv/bin/pip" install --force-reinstall --no-cache-dir "oci>=2.126.0"
 fi
-"${TARGET}/venv/bin/python" -c "import oci, requests; print('venv ok')"
+if ! "${TARGET}/venv/bin/python" -c "import importlib.metadata as m; m.version('splunk-opentelemetry')" 2>/dev/null; then
+  echo "pip retry: splunk-opentelemetry missing (required for real traces + log trace_id/span_id); reinstalling requirements"
+  "${TARGET}/venv/bin/pip" install --no-cache-dir -r "${TARGET}/requirements.txt"
+fi
+"${TARGET}/venv/bin/python" -c "import importlib.metadata as m; import oci, requests; print('venv ok', 'splunk-otel', m.version('splunk-opentelemetry'))"
 
 if [[ ! -f "${TARGET}/env" ]]; then
   install -m 0600 "${TARGET}/env.example" "${TARGET}/env"
