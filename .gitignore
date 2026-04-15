@@ -1,0 +1,10 @@
+.env
+*.pem
+__pycache__/
+*.pyc
+.venv/
+venv/
+opt/script/venv/
+opt/script/env
+opt/script/logs/
+

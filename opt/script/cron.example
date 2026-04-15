@@ -1,0 +1,6 @@
+# Metrics bridge every 5 minutes (install into /etc/cron.d/oci-metrics-bridge).
+# JSON run summary overwrites /opt/script/logs/last-run.json each run.
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+
+*/5 * * * * root /opt/script/run-with-otel.sh >> /opt/script/logs/cron.log 2>&1

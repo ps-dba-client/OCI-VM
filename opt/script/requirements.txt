@@ -1,0 +1,6 @@
+oci>=2.126.0
+requests>=2.31.0
+splunk-opentelemetry>=2.0.0,<3
+opentelemetry-instrumentation-requests>=0.43b0
+opentelemetry-instrumentation-urllib3>=0.43b0
+opentelemetry-instrumentation-logging>=0.43b0
